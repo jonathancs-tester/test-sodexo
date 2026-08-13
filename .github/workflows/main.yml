@@ -1,0 +1,42 @@
+name: Sodexo Daily
+
+on:
+  schedule:
+    - cron: '0 10 * * *' # 07:00 BRT (UTC-3)
+  workflow_dispatch:
+    inputs:
+      execution_date:
+        description: 'Data no formato YYYY-MM-DD (opcional)'
+        required: false
+        type: string
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Define execution date
+        id: date
+        run: |
+          if [ -n "${{ github.event.inputs.execution_date }}" ]; then
+            echo "DATE=${{ github.event.inputs.execution_date }}" >> $GITHUB_ENV
+          else
+            echo "DATE=$(date +%Y-%m-%d)" >> $GITHUB_ENV
+          fi
+
+      - name: Run Sodexo
+        run: |
+          python sodexo.py \
+            --email "${{ secrets.SODEXO_EMAIL }}" \
+            --password "${{ secrets.SODEXO_PASSWORD }}" \
+            --client-id "${{ secrets.SODEXO_CLIENT_ID }}" \
+            --date "${DATE}"
