@@ -308,16 +308,60 @@ def montar_texto_para_console(cardapio):
 
 def montar_texto_para_teams(cardapio, idioma="pt-BR", date_label: Optional[str] = None):
     """
-    Gera um markdown simples adequado ao Teams (suporta listas, negrito e cabeçalhos).
+    Gera um resumo legível no Teams usando apenas Markdown compatível com webhook.
     """
     hoje = date_label or datetime.now().strftime("%d/%m/%Y")
-    linhas = [f"🍽 **Cardápio – {hoje}**\n"]
+    total_produtos = sum(len(categoria.get("produtos", [])) for categoria in cardapio)
+    linhas = [
+        "🍽 <strong>Cardápio do dia</strong><br>",
+        f"📅 <strong>Data:</strong> {hoje}<br>",
+        f"🍴 <strong>Opções disponíveis:</strong> {total_produtos}",
+        "",
+        "---",
+        "",
+    ]
+
     for categoria in cardapio:
-        linhas.append(f"### {categoria['categoria']}")
+        nome_categoria = str(categoria.get("categoria", "Sem nome")).strip()
+        categoria_normalizada = nome_categoria.rstrip(" !:").casefold()
+        if categoria_normalizada in {"aviso", "avisos", "notice"}:
+            linhas.append("## ℹ️ Aviso")
+            for produto in categoria.get("produtos", []):
+                aviso = produto.get("nome", "").strip()
+                descricao_aviso = produto.get("descricao", "").strip()
+                texto_aviso = aviso or descricao_aviso
+                if aviso and descricao_aviso:
+                    texto_aviso = f"{aviso} {descricao_aviso}"
+                if texto_aviso:
+                    linhas.append(f"> {texto_aviso}")
+            linhas.append("")
+            linhas.append("---")
+            linhas.append("")
+            continue
+
+        linhas.append(f"## {nome_categoria}")
         for produto in categoria["produtos"]:
             nome = produto["nome"]
-            linhas.append(f"- {nome}")
-        linhas.append("")  # espaço entre categorias
+            linhas.append(f"- <strong>{nome}</strong>")
+
+            descricao = produto.get("descricao")
+            if descricao:
+                linhas.append(f"  - Descrição: {descricao}")
+
+            tags = produto.get("tags") or []
+            if tags:
+                linhas.append(f"  🏷️ {', '.join(str(tag) for tag in tags)}")
+
+            alergenos = produto.get("alergenos") or []
+            alerta = ", ".join(str(alergeno) for alergeno in alergenos) if alergenos else "Nenhum informado"
+            linhas.append(f"  ⚠️ <strong>Alergênicos:</strong> {alerta}")
+
+            linhas.append("")
+
+        linhas.append("---")
+        linhas.append("")
+
+    linhas.append("_Bom apetite!_")
     return "\n".join(linhas)
 
 def enviar_para_teams(texto_markdown: str):
