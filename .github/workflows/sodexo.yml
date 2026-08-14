@@ -2,7 +2,7 @@ name: Sodexo Daily
 
 on:
   schedule:
-    - cron: '30 7 * * *' # 07:00 BRT (UTC-3)
+    - cron: '*/5 * * * *' # 07:00 BRT (UTC-3)
   workflow_dispatch:
     inputs:
       execution_date:
