@@ -1,26 +1,3 @@
-
-"""
-Script para autenticar na API Wedigitek, obter o token, resolver o menuId do dia
-com base na data atual da máquina e buscar o cardápio completo, enviando ao Teams.
-
-Fluxo:
-1) POST /auth/login -> retorna JSON com chave "token"
-2) GET /restaurants/{unitId}/menus?availableFor=IN&date=YYYY-MM-DD -> pega o menuId (em data.docs[0].id/_id)
-3) GET /restaurants/{unitId}/menus/{menuId} com Authorization: We <token>
-4) Parseia categorias/produtos
-5) Imprime no console e envia o output para um webhook do Microsoft Teams
-
-Uso:
-    pip install requests
-    WE_EMAIL="seu_email" WE_PASSWORD="sua_senha" WE_CLIENT_ID="seu_client_id" TEAMS_WEBHOOK_URL="https://..." \
-      python cardapio_wedigitek_teams.py
-
-ou:
-    python cardapio_wedigitek_teams.py --email ... --password ... --client-id ... [--date 2026-01-22] [--available-for IN] [--idioma pt-BR]
-
-NUNCA versione credenciais no Git.
-"""
-
 import os
 import sys
 import json
