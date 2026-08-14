@@ -60,8 +60,8 @@ COMMON_HEADERS = {
 # Configure via variável de ambiente TEAMS_WEBHOOK_URL
 TEAMS_WEBHOOK_URL = os.getenv(
     "TEAMS_WEBHOOK_URL",
-    # "https://default1b5ba8a2315d45ce959a42b748c01d.e7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/8e89150054b34d5f9f9d312711d1594e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=gznsgi0YjFliS07puhr1PYiUUKjD5_EyVM0Fe-u2yW8"
-    "https://default1b5ba8a2315d45ce959a42b748c01d.e7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/6f873eb0ef374a699669e8533f06ff76/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=-azBxWgLjambz27TxWoB1lxCoXweREwdl_S3Hydv8f4"
+    "https://default1b5ba8a2315d45ce959a42b748c01d.e7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/8e89150054b34d5f9f9d312711d1594e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=gznsgi0YjFliS07puhr1PYiUUKjD5_EyVM0Fe-u2yW8"
+    #"https://default1b5ba8a2315d45ce959a42b748c01d.e7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/6f873eb0ef374a699669e8533f06ff76/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=-azBxWgLjambz27TxWoB1lxCoXweREwdl_S3Hydv8f4"
 )
 
 
