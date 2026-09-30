@@ -36,7 +36,4 @@ jobs:
       - name: Run Sodexo
         run: |
           python sodexo.py \
-            --email "${{ secrets.SODEXO_EMAIL }}" \
-            --password "${{ secrets.SODEXO_PASSWORD }}" \
-            --client-id "${{ secrets.SODEXO_CLIENT_ID }}" \
             --date "${DATE}"
