@@ -1,3 +1,31 @@
+
+"""
+Script para resolver o menuId do dia na API do Sodexo Direct e buscar o
+cardápio completo, enviando ao Teams.
+
+Fluxo:
+1) GET /restaurants/{unitId}/menus?availableFor=IN&date=YYYY-MM-DD
+2) GET /restaurants/{unitId}/menus/{menuId}
+3) Parseia categorias/produtos
+4) Imprime no console e envia o output para um webhook do Microsoft Teams
+
+APIs confirmadas no APK Sodexo Direct:
+- https://api.direct.wefood.io/restaurants/{unitId}/menus
+- https://api.direct.wefood.io/restaurants/{unitId}/menus/{menuId}
+- https://cdn.wedigitek.io (imagens dos produtos)
+- https://surveys.services.direct.wefood.io (pesquisas da aplicação)
+
+Uso:
+    pip install requests
+        TEAMS_WEBHOOK_URL="https://..." \
+      python cardapio_wedigitek_teams.py
+
+ou:
+    python cardapio_wedigitek_teams.py [--date 2026-01-22] [--available-for IN] [--idioma pt-BR]
+
+NUNCA versione credenciais no Git.
+"""
+
 import os
 import sys
 import json
@@ -21,10 +49,11 @@ except Exception:
 # =========================
 
 RESTAURANT_UNIT_ID = "628baa50edd6ea837b43ba34"
-
-LOGIN_URL = "https://api.wedigitek.io/auth/login"
-MENUS_BY_DATE_URL = "https://api.wedigitek.io/restaurants/{unitId}/menus?availableFor={availableFor}&date={yyyy_mm_dd}"
-MENU_BY_ID_URL = "https://api.wedigitek.io/restaurants/{unitId}/menus/{menuId}"
+API_BASE_URL = os.getenv("WE_API_BASE_URL", "https://api.direct.wefood.io").rstrip("/")
+API_VERIFY_TLS = os.getenv("WE_API_VERIFY_TLS", "false").strip().lower() in {"1", "true", "yes"}
+LOGIN_URL = os.getenv("WE_LOGIN_URL", "https://api.wedigitek.io/auth/login")
+MENUS_BY_DATE_URL = API_BASE_URL + "/restaurants/{unitId}/menus?availableFor={availableFor}&date={yyyy_mm_dd}"
+MENU_BY_ID_URL = API_BASE_URL + "/restaurants/{unitId}/menus/{menuId}"
 
 COMMON_HEADERS = {
     "Accept-Language": "en,en-US;q=0.9,pt-BR;q=0.8,pt;q=0.7",
@@ -35,12 +64,12 @@ COMMON_HEADERS = {
 
 # ===== Webhook do Microsoft Teams =====
 # Configure via variável de ambiente TEAMS_WEBHOOK_URL
+TEAMS_VERIFY_TLS = os.getenv("WE_TEAMS_VERIFY_TLS", "false").strip().lower() in {"1", "true", "yes"}
 TEAMS_WEBHOOK_URL = os.getenv(
     "TEAMS_WEBHOOK_URL",
-     #"https://default1b5ba8a2315d45ce959a42b748c01d.e7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/8e89150054b34d5f9f9d312711d1594e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=gznsgi0YjFliS07puhr1PYiUUKjD5_EyVM0Fe-u2yW8"
-   "https://default1b5ba8a2315d45ce959a42b748c01d.e7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/6f873eb0ef374a699669e8533f06ff76/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=-azBxWgLjambz27TxWoB1lxCoXweREwdl_S3Hydv8f4"
+    # "https://default1b5ba8a2315d45ce959a42b748c01d.e7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/8e89150054b34d5f9f9d312711d1594e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=gznsgi0YjFliS07puhr1PYiUUKjD5_EyVM0Fe-u2yW8"
+    "https://default1b5ba8a2315d45ce959a42b748c01d.e7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/6f873eb0ef374a699669e8533f06ff76/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=-azBxWgLjambz27TxWoB1lxCoXweREwdl_S3Hydv8f4"
 )
-
 
 # =========================
 # FUNÇÕES DE SUPORTE
@@ -122,7 +151,7 @@ def login(email: str, password: str, client_id: str) -> str:
         "clientId": client_id,
     }
 
-    resp = requests.post(LOGIN_URL, headers=headers, json=payload, timeout=20)
+    resp = requests.post(LOGIN_URL, headers=headers, json=payload, timeout=20, verify=API_VERIFY_TLS)
     resp.raise_for_status()
     data = resp.json()
 
@@ -138,18 +167,16 @@ def login(email: str, password: str, client_id: str) -> str:
     return token
 
 
-def get_menu_list_for_date(token: str, unit_id: str, available_for: str, yyyy_mm_dd: str) -> List[Dict[str, Any]]:
+def get_menu_list_for_date(token: Optional[str], unit_id: str, available_for: str, yyyy_mm_dd: str) -> List[Dict[str, Any]]:
     """
     Chama GET /restaurants/{unitId}/menus?availableFor=IN&date=YYYY-MM-DD
     Retorna a lista de menus (conteúdo de 'docs' quando paginado).
     """
     url = MENUS_BY_DATE_URL.format(unitId=unit_id, availableFor=available_for, yyyy_mm_dd=yyyy_mm_dd)
-    headers = {
-        "Accept": "*/*",
-        "Authorization": f"We {token}",
-        **COMMON_HEADERS,
-    }
-    resp = requests.get(url, headers=headers, timeout=20)
+    headers = {"Accept": "*/*", **COMMON_HEADERS}
+    if token:
+        headers["Authorization"] = f"We {token}"
+    resp = requests.get(url, headers=headers, timeout=20, verify=API_VERIFY_TLS)
     resp.raise_for_status()
     data = resp.json()
 
@@ -199,17 +226,15 @@ def pick_menu_id(menus: List[Dict[str, Any]]) -> Optional[str]:
     return None
 
 
-def get_menu_by_id(token: str, unit_id: str, menu_id: str) -> Dict[str, Any]:
+def get_menu_by_id(token: Optional[str], unit_id: str, menu_id: str) -> Dict[str, Any]:
     """
     Busca o cardápio detalhado com Authorization: We <token>.
     """
     url = MENU_BY_ID_URL.format(unitId=unit_id, menuId=menu_id)
-    headers = {
-        "Accept": "*/*",
-        "Authorization": f"We {token}",
-        **COMMON_HEADERS,
-    }
-    resp = requests.get(url, headers=headers, timeout=20)
+    headers = {"Accept": "*/*", **COMMON_HEADERS}
+    if token:
+        headers["Authorization"] = f"We {token}"
+    resp = requests.get(url, headers=headers, timeout=20, verify=API_VERIFY_TLS)
     resp.raise_for_status()
     return resp.json()
 
@@ -342,6 +367,9 @@ def montar_texto_para_teams(cardapio, idioma="pt-BR", date_label: Optional[str] 
     return "\n".join(linhas)
 
 def enviar_para_teams(texto_markdown: str):
+    if not TEAMS_WEBHOOK_URL:
+        raise ValueError("TEAMS_WEBHOOK_URL não configurada.")
+
     payload = {
         "text": texto_markdown
     }
@@ -351,7 +379,8 @@ def enviar_para_teams(texto_markdown: str):
             TEAMS_WEBHOOK_URL,
             json=payload,
             headers={"Content-Type": "application/json"},
-            timeout=20
+            timeout=20,
+            verify=TEAMS_VERIFY_TLS
         )
 
         print(f"📡 Status envio Teams: {resp.status_code}")
@@ -399,8 +428,14 @@ def main():
     date_label_br = datetime.strptime(yyyy_mm_dd, "%Y-%m-%d").strftime("%d/%m/%Y")
 
     try:
-        print("🔐 Autenticando...")
-        token = login(args.email, args.password, args.client_id)
+        token = None
+        if any((args.email, args.password, args.client_id)):
+            if not all((args.email, args.password, args.client_id)):
+                raise ValueError("Para usar autenticação, informe email, password e clientId juntos.")
+            print("🔐 Autenticando...")
+            token = login(args.email, args.password, args.client_id)
+        else:
+            print("🌐 Consultando cardápio público do aplicativo...")
 
         print(f"📅 Buscando menuId para a data base: {yyyy_mm_dd} (availableFor={args.available_for})...")
         menu_id, data_utilizada = resolver_menu_id_para_intervalo(
