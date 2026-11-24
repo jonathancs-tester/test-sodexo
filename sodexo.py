@@ -2,28 +2,6 @@
 """
 Script para resolver o menuId do dia na API do Sodexo Direct e buscar o
 cardápio completo, enviando ao Teams.
-
-Fluxo:
-1) GET /restaurants/{unitId}/menus?availableFor=IN&date=YYYY-MM-DD
-2) GET /restaurants/{unitId}/menus/{menuId}
-3) Parseia categorias/produtos
-4) Imprime no console e envia o output para um webhook do Microsoft Teams
-
-APIs confirmadas no APK Sodexo Direct:
-- https://api.direct.wefood.io/restaurants/{unitId}/menus
-- https://api.direct.wefood.io/restaurants/{unitId}/menus/{menuId}
-- https://cdn.wedigitek.io (imagens dos produtos)
-- https://surveys.services.direct.wefood.io (pesquisas da aplicação)
-
-Uso:
-    pip install requests
-        TEAMS_WEBHOOK_URL="https://..." \
-      python cardapio_wedigitek_teams.py
-
-ou:
-    python cardapio_wedigitek_teams.py [--date 2026-01-22] [--available-for IN] [--idioma pt-BR]
-
-NUNCA versione credenciais no Git.
 """
 
 import os
@@ -31,6 +9,8 @@ import sys
 import json
 import base64
 import argparse
+import shutil
+import subprocess
 from datetime import datetime, timezone, date, timedelta
 from typing import Optional, Dict, Any, List
 import requests
@@ -67,9 +47,11 @@ COMMON_HEADERS = {
 TEAMS_VERIFY_TLS = os.getenv("WE_TEAMS_VERIFY_TLS", "false").strip().lower() in {"1", "true", "yes"}
 TEAMS_WEBHOOK_URL = os.getenv(
     "TEAMS_WEBHOOK_URL",
-    # "https://default1b5ba8a2315d45ce959a42b748c01d.e7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/8e89150054b34d5f9f9d312711d1594e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=gznsgi0YjFliS07puhr1PYiUUKjD5_EyVM0Fe-u2yW8"
-    "https://default1b5ba8a2315d45ce959a42b748c01d.e7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/6f873eb0ef374a699669e8533f06ff76/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=-azBxWgLjambz27TxWoB1lxCoXweREwdl_S3Hydv8f4"
+     #"https://default1b5ba8a2315d45ce959a42b748c01d.e7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/8e89150054b34d5f9f9d312711d1594e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=gznsgi0YjFliS07puhr1PYiUUKjD5_EyVM0Fe-u2yW8"
+     "https://default1b5ba8a2315d45ce959a42b748c01d.e7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/6f873eb0ef374a699669e8533f06ff76/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=-azBxWgLjambz27TxWoB1lxCoXweREwdl_S3Hydv8f4"
 )
+ZEN_QUOTES_URL = "https://zenquotes.io/api/random"
+AVISO_RESTAURANTE_PADRAO = "Para uma melhor experiência, evite utilizar o restaurante das 11h30 às 12h30!"
 
 # =========================
 # FUNÇÕES DE SUPORTE
@@ -308,6 +290,61 @@ def montar_texto_para_console(cardapio):
     return "\n".join(linhas)
 
 
+def _obter_json_zenquotes_com_curl() -> Any:
+    curl_path = shutil.which("curl.exe") or shutil.which("curl")
+    if not curl_path:
+        raise OSError("curl.exe não encontrado")
+
+    resultado = subprocess.run(
+        [
+            curl_path,
+            "--silent",
+            "--show-error",
+            "--max-time",
+            "20",
+            "--header",
+            "Accept: application/json",
+            "--user-agent",
+            COMMON_HEADERS["User-Agent"],
+            "--write-out",
+            "\\n%{http_code}",
+            ZEN_QUOTES_URL,
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=22,
+        check=False,
+    )
+    corpo, separador, status = resultado.stdout.rpartition("\n")
+    if not separador or status.strip() != "200":
+        raise ValueError(f"curl.exe retornou HTTP {status.strip() or 'desconhecido'}")
+    return json.loads(corpo)
+
+
+def obter_mensagem_motivacional() -> str:
+    try:
+        dados = _obter_json_zenquotes_com_curl()
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        print(f"⚠️ Não foi possível obter a mensagem motivacional do ZenQuotes via curl.exe ({exc}); usando o aviso padrão.")
+        return AVISO_RESTAURANTE_PADRAO
+
+    if not isinstance(dados, list) or not dados or not isinstance(dados[0], dict):
+        print("⚠️ O ZenQuotes não retornou uma citação válida; usando o aviso padrão.")
+        return AVISO_RESTAURANTE_PADRAO
+
+    citacao = dados[0].get("q")
+    if not isinstance(citacao, str) or not citacao.strip():
+        print("⚠️ O ZenQuotes não retornou uma citação válida; usando o aviso padrão.")
+        return AVISO_RESTAURANTE_PADRAO
+
+    autor = dados[0].get("a")
+    if isinstance(autor, str) and autor.strip():
+        return f"{citacao.strip()} — {autor.strip()}"
+    return citacao.strip()
+
+
 def montar_texto_para_teams(cardapio, idioma="pt-BR", date_label: Optional[str] = None):
     """
     Gera um resumo legível no Teams usando apenas Markdown compatível com webhook.
@@ -327,15 +364,8 @@ def montar_texto_para_teams(cardapio, idioma="pt-BR", date_label: Optional[str] 
         nome_categoria = str(categoria.get("categoria", "Sem nome")).strip()
         categoria_normalizada = nome_categoria.rstrip(" !:").casefold()
         if categoria_normalizada in {"aviso", "avisos", "notice"}:
-            linhas.append("## ℹ️ Aviso")
-            for produto in categoria.get("produtos", []):
-                aviso = produto.get("nome", "").strip()
-                descricao_aviso = produto.get("descricao", "").strip()
-                texto_aviso = aviso or descricao_aviso
-                if aviso and descricao_aviso:
-                    texto_aviso = f"{aviso} {descricao_aviso}"
-                if texto_aviso:
-                    linhas.append(f"> {texto_aviso}")
+            linhas.append("## ℹ️ Mensagem:")
+            linhas.append(f"> {obter_mensagem_motivacional()}")
             linhas.append("")
             linhas.append("---")
             linhas.append("")
