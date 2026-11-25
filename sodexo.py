@@ -364,7 +364,7 @@ def montar_texto_para_teams(cardapio, idioma="pt-BR", date_label: Optional[str] 
         nome_categoria = str(categoria.get("categoria", "Sem nome")).strip()
         categoria_normalizada = nome_categoria.rstrip(" !:").casefold()
         if categoria_normalizada in {"aviso", "avisos", "notice"}:
-            linhas.append("## ℹ️ Mensagem:")
+            linhas.append("## ℹ️ Mensagem do dia:")
             linhas.append(f"> {obter_mensagem_motivacional()}")
             linhas.append("")
             linhas.append("---")
