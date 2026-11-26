@@ -28,7 +28,8 @@ except Exception:
 # CONFIGURAÇÃO DO MENU
 # =========================
 
-RESTAURANT_UNIT_ID = "628baa50edd6ea837b43ba34"
+# RESTAURANT_UNIT_ID = "628baa50edd6ea837b43ba34"
+RESTAURANT_UNIT_ID = "628bf413edd6ea29c8454d97"
 API_BASE_URL = os.getenv("WE_API_BASE_URL", "https://api.direct.wefood.io").rstrip("/")
 API_VERIFY_TLS = os.getenv("WE_API_VERIFY_TLS", "false").strip().lower() in {"1", "true", "yes"}
 LOGIN_URL = os.getenv("WE_LOGIN_URL", "https://api.wedigitek.io/auth/login")
